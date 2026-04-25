@@ -221,8 +221,8 @@ export function ActivityCharts({ daily, users }: Props) {
           </p>
         ) : recentUsers.map((u) => (
           <div key={u.uid} className="grid grid-cols-6 px-4 py-3 text-sm" style={{ borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
-            <span className="truncate">{u.email ?? `${u.uid.slice(0, 10)}…`}</span>
-            <span>{u.lastActive.slice(0, 10)}</span>
+            <span className="truncate">{u.email ?? (u.uid ? `${u.uid.slice(0, 10)}…` : 'unknown')}</span>
+            <span>{u.lastActive?.slice(0, 10) ?? '—'}</span>
             <span>{u.totalMeals ?? 0}</span>
             <span>{u.totalSessions ?? 0}</span>
             <span>{u.totalSessionsCompleted ?? 0}</span>
