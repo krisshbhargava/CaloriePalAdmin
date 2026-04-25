@@ -4,7 +4,10 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { DailyAnalytics, UserAnalytics } from '@/models/analytics';
+import type {
+  DailyAnalytics, UserAnalytics,
+  PremiumExperimentVariant, PremiumExperimentAction,
+} from '@/models/analytics';
 
 const C = {
   primary: '#6366F1',
@@ -12,9 +15,20 @@ const C = {
   amber: '#F59E0B',
   red: '#EF4444',
   indigo2: '#818CF8',
+  muted: '#9CA3AF',
 };
 
+const AXIS_COLOR = '#9CA3AF';
+const GRID_COLOR = 'var(--border)';
 const CHART_H = 250;
+
+const xAxisProps = {
+  tick: { fontSize: 10, fill: AXIS_COLOR },
+  angle: -35 as const,
+  textAnchor: 'end' as const,
+  height: 48,
+};
+const yAxisProps = { tick: { fontSize: 11, fill: AXIS_COLOR }, width: 30 };
 
 function SectionTitle({ children }: { children: string }) {
   return (
@@ -54,19 +68,41 @@ function allZero(data: Record<string, unknown>[], key: string) {
   return data.every((d) => (d[key] as number) === 0);
 }
 
-type Props = { daily: DailyAnalytics[]; users: UserAnalytics[] };
+// ─── AB Test helpers ──────────────────────────────────────────────────────────
 
-export function ActivityCharts({ daily, users }: Props) {
-  const axisColor = '#9CA3AF';
-  const gridColor = 'var(--border)';
-  const xAxisProps = {
-    tick: { fontSize: 10, fill: axisColor },
-    angle: -35 as const,
-    textAnchor: 'end' as const,
-    height: 48,
-  };
-  const yAxisProps = { tick: { fontSize: 11, fill: axisColor }, width: 30 };
+const AB_ACTIONS: PremiumExperimentAction[] = [
+  'paywall_viewed',
+  'favorites_unlock_clicked',
+  'meal_rating_tapped',
+  'favorite_toggled',
+  'attach_photo_attempted',
+];
 
+const ACTION_LABELS: Record<PremiumExperimentAction, string> = {
+  paywall_viewed: 'Paywall Viewed',
+  paywall_dismissed: 'Paywall Dismissed',
+  switch_to_paid_alpha_clicked: 'Upgrade Clicked',
+  attach_photo_attempted: 'Photo Attempted',
+  attach_photo_selected: 'Photo Selected',
+  favorites_unlock_clicked: 'Favorites Unlock',
+  meal_rating_tapped: 'Meal Rated',
+  favorite_toggled: 'Favorited',
+};
+
+function sumExperimentAction(
+  daily: DailyAnalytics[],
+  variant: PremiumExperimentVariant,
+  action: PremiumExperimentAction,
+): number {
+  const field = `premiumExperiment_${variant}_${action}` as `premiumExperiment_${PremiumExperimentVariant}_${PremiumExperimentAction}`;
+  return daily.reduce((s, d) => s + (d[field] ?? 0), 0);
+}
+
+// ─── Activity Charts ──────────────────────────────────────────────────────────
+
+type Props = { daily: DailyAnalytics[] };
+
+export function ActivityCharts({ daily }: Props) {
   const dauData = daily.map((d) => ({ date: shortDate(d.date), dau: d.activeUsers.length }));
   const mealsData = daily.map((d) => ({ date: shortDate(d.date), meals: d.mealsLogged }));
   const funnelData = daily.map((d) => ({
@@ -94,8 +130,6 @@ export function ActivityCharts({ daily, users }: Props) {
   ];
   const inputPieHasData = inputPie.some((p) => p.value > 0);
 
-  const recentUsers = [...users].slice(0, 10);
-
   return (
     <div className="flex flex-col gap-4">
       {/* Engagement */}
@@ -105,7 +139,7 @@ export function ActivityCharts({ daily, users }: Props) {
           {allZero(dauData, 'dau') ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={CHART_H}>
               <LineChart data={dauData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                 <XAxis dataKey="date" {...xAxisProps} />
                 <YAxis {...yAxisProps} allowDecimals={false} />
                 <Tooltip formatter={(v: number) => [`${v} users`, 'DAU']} />
@@ -119,7 +153,7 @@ export function ActivityCharts({ daily, users }: Props) {
           {allZero(mealsData, 'meals') ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={CHART_H}>
               <BarChart data={mealsData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                 <XAxis dataKey="date" {...xAxisProps} />
                 <YAxis {...yAxisProps} allowDecimals={false} />
                 <Tooltip formatter={(v: number) => [`${v} meals`, 'Logged']} />
@@ -137,11 +171,11 @@ export function ActivityCharts({ daily, users }: Props) {
           {allZero(funnelData, 'Completed') && allZero(funnelData, 'Abandoned') ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={CHART_H}>
               <BarChart data={funnelData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                 <XAxis dataKey="date" {...xAxisProps} />
                 <YAxis {...yAxisProps} allowDecimals={false} />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 12, color: axisColor }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
                 <Bar dataKey="Completed" stackId="a" fill={C.green} />
                 <Bar dataKey="In Progress" stackId="a" fill={C.amber} />
                 <Bar dataKey="Abandoned" stackId="a" fill={C.red} radius={[4, 4, 0, 0]} />
@@ -154,7 +188,7 @@ export function ActivityCharts({ daily, users }: Props) {
           {allZero(clarData, 'rate') ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={CHART_H}>
               <LineChart data={clarData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                 <XAxis dataKey="date" {...xAxisProps} />
                 <YAxis {...yAxisProps} />
                 <Tooltip formatter={(v: number) => [`${v}`, 'Clarifications / session']} />
@@ -172,7 +206,7 @@ export function ActivityCharts({ daily, users }: Props) {
           {allZero(calData, 'avg') ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={CHART_H}>
               <LineChart data={calData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
                 <XAxis dataKey="date" {...xAxisProps} />
                 <YAxis {...yAxisProps} width={40} />
                 <Tooltip formatter={(v: number) => [`${v} kcal`, 'Avg per meal']} />
@@ -207,11 +241,20 @@ export function ActivityCharts({ daily, users }: Props) {
         </ChartCard>
       </div>
 
-      {/* Recent Users */}
+    </div>
+  );
+}
+
+// ─── Recent Users Table ───────────────────────────────────────────────────────
+
+export function RecentUsersTable({ users }: { users: UserAnalytics[] }) {
+  const recentUsers = [...users].slice(0, 10);
+  return (
+    <div className="flex flex-col gap-4">
       <SectionTitle>Recent Users</SectionTitle>
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-        <div className="grid grid-cols-6 px-4 py-3 text-xs font-bold uppercase tracking-wide opacity-45" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
-          {['User', 'Last Active', 'Total Meals', 'Sessions', 'Completed', 'Active Days'].map((h) => (
+        <div className="grid grid-cols-7 px-4 py-3 text-xs font-bold uppercase tracking-wide opacity-45" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
+          {['User', 'Last Active', 'Total Meals', 'Sessions', 'Completed', 'Active Days', 'AB Variant'].map((h) => (
             <span key={h}>{h}</span>
           ))}
         </div>
@@ -220,15 +263,174 @@ export function ActivityCharts({ daily, users }: Props) {
             No user data yet — starts recording on next session
           </p>
         ) : recentUsers.map((u) => (
-          <div key={u.uid} className="grid grid-cols-6 px-4 py-3 text-sm" style={{ borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
+          <div key={u.uid} className="grid grid-cols-7 px-4 py-3 text-sm" style={{ borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
             <span className="truncate">{u.email ?? (u.uid ? `${u.uid.slice(0, 10)}…` : 'unknown')}</span>
             <span>{u.lastActive?.slice(0, 10) ?? '—'}</span>
             <span>{u.totalMeals ?? 0}</span>
             <span>{u.totalSessions ?? 0}</span>
             <span>{u.totalSessionsCompleted ?? 0}</span>
             <span>{u.activeDates?.length ?? 0}</span>
+            <span>
+              {u.premiumAccessVariant === 'premium_access' ? (
+                <span className="px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: '#6366F120', color: C.primary }}>Premium</span>
+              ) : u.premiumAccessVariant === 'no_access' ? (
+                <span className="px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: '#10B98120', color: C.green }}>No Access</span>
+              ) : (
+                <span className="opacity-30">—</span>
+              )}
+            </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── AB Test Charts ───────────────────────────────────────────────────────────
+
+type ABTestProps = { daily: DailyAnalytics[]; users: UserAnalytics[] };
+
+export function ABTestCharts({ daily, users }: ABTestProps) {
+  const premiumCount = users.filter((u) => u.premiumAccessVariant === 'premium_access').length;
+  const noAccessCount = users.filter((u) => u.premiumAccessVariant === 'no_access').length;
+  const unassignedCount = users.filter((u) => !u.premiumAccessVariant).length;
+
+  const variantPie = [
+    { name: 'Premium Access', value: premiumCount },
+    { name: 'No Access', value: noAccessCount },
+    ...(unassignedCount > 0 ? [{ name: 'Unassigned', value: unassignedCount }] : []),
+  ].filter((p) => p.value > 0);
+
+  const actionData = AB_ACTIONS.map((action) => ({
+    action: ACTION_LABELS[action],
+    'Premium Access': sumExperimentAction(daily, 'premium_access', action),
+    'No Access': sumExperimentAction(daily, 'no_access', action),
+  }));
+  const hasActionData = actionData.some((d) => d['Premium Access'] > 0 || d['No Access'] > 0);
+
+  const mealData = daily.map((d) => ({
+    date: shortDate(d.date),
+    'Premium Access': d.mealsLogged_premium_access ?? 0,
+    'No Access': d.mealsLogged_no_access ?? 0,
+  }));
+  const hasMealData = mealData.some((d) => d['Premium Access'] > 0 || d['No Access'] > 0);
+
+  const sessionData = daily.map((d) => ({
+    date: shortDate(d.date),
+    'Premium Access': d.sessionsStarted_premium_access ?? 0,
+    'No Access': d.sessionsStarted_no_access ?? 0,
+  }));
+  const hasSessionData = sessionData.some((d) => d['Premium Access'] > 0 || d['No Access'] > 0);
+
+  const durationData = daily.map((d) => {
+    const pCompleted = d.sessionsCompleted_premium_access ?? 0;
+    const nCompleted = d.sessionsCompleted_no_access ?? 0;
+    return {
+      date: shortDate(d.date),
+      'Premium Access': pCompleted > 0 ? Math.round((d.totalSessionDuration_premium_access ?? 0) / pCompleted) : 0,
+      'No Access': nCompleted > 0 ? Math.round((d.totalSessionDuration_no_access ?? 0) / nCompleted) : 0,
+    };
+  });
+  const hasDurationData = durationData.some((d) => d['Premium Access'] > 0 || d['No Access'] > 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Variant split + feature interactions */}
+      <div className="flex gap-4 flex-wrap">
+        <ChartCard title="User Variant Distribution">
+          {variantPie.length === 0 ? <EmptyChart /> : (
+            <ResponsiveContainer width="100%" height={CHART_H}>
+              <PieChart>
+                <Pie
+                  data={variantPie}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={95}
+                  paddingAngle={4}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`}
+                  labelLine={false}
+                >
+                  <Cell fill={C.primary} />
+                  <Cell fill={C.green} />
+                  <Cell fill={C.muted} />
+                </Pie>
+                <Tooltip formatter={(v: number) => [`${v} users`]} />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Feature Interactions by Variant (30-day)">
+          {!hasActionData ? <EmptyChart /> : (
+            <ResponsiveContainer width="100%" height={CHART_H}>
+              <BarChart data={actionData} layout="vertical" margin={{ left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: AXIS_COLOR }} allowDecimals={false} />
+                <YAxis type="category" dataKey="action" tick={{ fontSize: 10, fill: AXIS_COLOR }} width={100} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
+                <Bar dataKey="Premium Access" fill={C.primary} radius={[0, 4, 4, 0]} barSize={10} />
+                <Bar dataKey="No Access" fill={C.green} radius={[0, 4, 4, 0]} barSize={10} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Engagement metrics by variant */}
+      <div className="flex gap-4 flex-wrap">
+        <ChartCard title="Meal Logs by Variant">
+          {!hasMealData ? <EmptyChart /> : (
+            <ResponsiveContainer width="100%" height={CHART_H}>
+              <LineChart data={mealData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+                <XAxis dataKey="date" {...xAxisProps} />
+                <YAxis {...yAxisProps} allowDecimals={false} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
+                <Line type="monotone" dataKey="Premium Access" stroke={C.primary} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="No Access" stroke={C.green} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Sessions per Day by Variant">
+          {!hasSessionData ? <EmptyChart /> : (
+            <ResponsiveContainer width="100%" height={CHART_H}>
+              <LineChart data={sessionData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+                <XAxis dataKey="date" {...xAxisProps} />
+                <YAxis {...yAxisProps} allowDecimals={false} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
+                <Line type="monotone" dataKey="Premium Access" stroke={C.primary} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="No Access" stroke={C.green} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      <div className="flex gap-4 flex-wrap">
+        <ChartCard title="Avg Session Duration by Variant (sec)">
+          {!hasDurationData ? <EmptyChart /> : (
+            <ResponsiveContainer width="100%" height={CHART_H}>
+              <LineChart data={durationData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+                <XAxis dataKey="date" {...xAxisProps} />
+                <YAxis {...yAxisProps} width={40} />
+                <Tooltip formatter={(v: number) => [`${v}s`]} />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS_COLOR }} />
+                <Line type="monotone" dataKey="Premium Access" stroke={C.primary} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="No Access" stroke={C.green} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
       </div>
     </div>
   );

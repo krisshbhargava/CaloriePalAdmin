@@ -6,7 +6,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { fetchDailyAnalytics, fetchAllUserAnalytics, fetchMealHistory } from '@/lib/firestore';
 import { KpiCard } from '@/components/kpi-card';
-import { ActivityCharts } from '@/components/charts';
+import { ActivityCharts, ABTestCharts, RecentUsersTable } from '@/components/charts';
 import type { DailyAnalytics, UserAnalytics } from '@/models/analytics';
 
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
@@ -112,6 +112,11 @@ export default function DashboardPage() {
   const premiumTaps30 = daily.reduce((s, d) => s + d.premiumUpsellClicks, 0);
   const voiceToggles30 = daily.reduce((s, d) => s + d.voiceToggles, 0);
 
+  // AB test KPIs
+  const premiumGroupCount = users.filter((u) => u.premiumAccessVariant === 'premium_access').length;
+  const noAccessGroupCount = users.filter((u) => u.premiumAccessVariant === 'no_access').length;
+  const paywallViews30 = daily.reduce((s, d) => s + (d['premiumExperiment_premium_access_paywall_viewed'] ?? 0), 0);
+
   if (!authed) return null;
 
   return (
@@ -162,7 +167,16 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts */}
-            <ActivityCharts daily={daily} users={users} />
+            <ActivityCharts daily={daily} />
+
+            {/* A/B Test */}
+            <div className="flex flex-wrap gap-3">
+              <KpiCard label="Premium Group" value={premiumGroupCount} sub="users assigned premium" accent="#6366F1" />
+              <KpiCard label="No Access Group" value={noAccessGroupCount} sub="users in control" accent="#10B981" />
+              <KpiCard label="Paywall Views" value={paywallViews30} sub="30-day (premium group)" accent="#818CF8" />
+            </div>
+            <ABTestCharts daily={daily} users={users} />
+            <RecentUsersTable users={users} />
           </>
         )}
       </div>
